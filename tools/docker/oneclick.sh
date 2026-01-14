@@ -3,21 +3,21 @@
 set -euo pipefail
 
 # Allow environment overrides for advanced users
-: ""
-: ""
-: ""
-: ""
-: ""
-: ""
-: ""
-: ""
+: "${KIRO_CONSOLE_PORT:=8990}"
+: "${KIRO_CONSOLE_HOST:=0.0.0.0}"
+: "${KIRO_CONSOLE_IMAGE:=kiro-console:latest}"
+: "${KIRO_CONSOLE_CONTAINER:=kiro-console}"
+: "${KIRO_CONSOLE_CONFIG_DIR:=/var/lib/kiro-console}"
+: "${KIRO_CONSOLE_REPO:=https://github.com/lilizero123/Kiro-Console.git}"
+: "${KIRO_CONSOLE_BRANCH:=master}"
+: "${KIRO_CONSOLE_FORCE_BUILD:=0}"
 
 command_exists() {
-  command -v "" >/dev/null 2>&1
+  command -v "$1" >/dev/null 2>&1
 }
 
 run_sudo() {
-  if [ "197609" -eq 0 ]; then
+  if [ "$(id -u)" -eq 0 ]; then
     "$@"
   else
     sudo "$@"
@@ -49,78 +49,78 @@ ensure_docker() {
 }
 
 prepare_config() {
-  info "Preparing config directory "
-  run_sudo mkdir -p ""
+  info "Preparing config directory ${KIRO_CONSOLE_CONFIG_DIR}"
+  run_sudo mkdir -p "${KIRO_CONSOLE_CONFIG_DIR}"
 
-  CONFIG_FILE="/config.json"
-  CREDENTIALS_FILE="/credentials.json"
+  CONFIG_FILE="${KIRO_CONSOLE_CONFIG_DIR}/config.json"
+  CREDENTIALS_FILE="${KIRO_CONSOLE_CONFIG_DIR}/credentials.json"
 
-  if [ ! -f "" ]; then
-    cat <<EOF | run_sudo tee "" >/dev/null
+  if [ ! -f "${CONFIG_FILE}" ]; then
+    cat <<EOF | run_sudo tee "${CONFIG_FILE}" >/dev/null
 {
-  "host": "",
-  "port": ,
+  "host": "${KIRO_CONSOLE_HOST}",
+  "port": ${KIRO_CONSOLE_PORT},
   "apiKey": "sk-kiro-console-qazWSXedcRFV123456",
   "region": "us-east-1"
 }
 EOF
   fi
 
-  if [ ! -f "" ]; then
-    echo "[]" | run_sudo tee "" >/dev/null
+  if [ ! -f "${CREDENTIALS_FILE}" ]; then
+    echo "[]" | run_sudo tee "${CREDENTIALS_FILE}" >/dev/null
   fi
 }
 
 build_or_pull_image() {
   NEED_BUILD=1
 
-  if [[ "" == "1" ]]; then
+  if [[ "${KIRO_CONSOLE_FORCE_BUILD}" == "1" ]]; then
     info "KIRO_CONSOLE_FORCE_BUILD=1, skip pull and force source build"
   else
-    info "Trying to pull prebuilt image "
-    if run_sudo docker pull "" >/dev/null 2>&1; then
-      info "Image  pulled successfully"
+    info "Trying to pull prebuilt image ${KIRO_CONSOLE_IMAGE}"
+    if run_sudo docker pull "${KIRO_CONSOLE_IMAGE}" >/dev/null 2>&1; then
+      info "Image ${KIRO_CONSOLE_IMAGE} pulled successfully"
       NEED_BUILD=0
     else
       info "Image pull failed, falling back to local build"
     fi
   fi
 
-  if [[ "" == "1" ]]; then
-    TMP_DIR="/tmp/tmp.TXgcdV54At"
+  if [[ "${NEED_BUILD}" == "1" ]]; then
+    TMP_DIR="$(mktemp -d)"
     cleanup() {
-      rm -rf ""
+      rm -rf "${TMP_DIR}"
     }
     trap cleanup EXIT
 
-    info "Cloning  ()"
-    git clone --depth 1 --branch "" "" "/repo"
+    info "Cloning ${KIRO_CONSOLE_REPO} (${KIRO_CONSOLE_BRANCH})"
+    git clone --depth 1 --branch "${KIRO_CONSOLE_BRANCH}" "${KIRO_CONSOLE_REPO}" "${TMP_DIR}/repo"
 
-    info "Building Docker image "
-    run_sudo docker build -t "" "/repo"
+    info "Building Docker image ${KIRO_CONSOLE_IMAGE}"
+    run_sudo docker build -t "${KIRO_CONSOLE_IMAGE}" "${TMP_DIR}/repo"
   fi
 }
 
 run_container() {
-  if run_sudo docker ps -a --format '{{.Names}}' | grep -q "^$"; then
-    info "Removing existing container "
-    run_sudo docker rm -f "" >/dev/null 2>&1 || true
+  if run_sudo docker ps -a --format '{{.Names}}' | grep -q "^${KIRO_CONSOLE_CONTAINER}$"; then
+    info "Removing existing container ${KIRO_CONSOLE_CONTAINER}"
+    run_sudo docker rm -f "${KIRO_CONSOLE_CONTAINER}" >/dev/null 2>&1 || true
   fi
 
-  info "Starting container "
+  info "Starting container ${KIRO_CONSOLE_CONTAINER}"
   run_sudo docker run -d \
-    --name "" \
+    --name "${KIRO_CONSOLE_CONTAINER}" \
     --restart unless-stopped \
-    -p ":8990" \
-    -v ":/app/config" \
-    ""
+    -p "${KIRO_CONSOLE_PORT}:8990" \
+    -v "${KIRO_CONSOLE_CONFIG_DIR}:/app/config" \
+    "${KIRO_CONSOLE_IMAGE}"
 
   cat <<EON
 
 ------------------------------------------------------------------
 Kiro Console is running.
-Open   : http://<server-ip>:/admin
-Config : 
+Open   : http://<server-ip>:${KIRO_CONSOLE_PORT}/admin
+Config : ${KIRO_CONSOLE_CONFIG_DIR}
 Re-run this script to rebuild and restart at any time.
 ------------------------------------------------------------------
 EON
