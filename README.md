@@ -59,7 +59,9 @@ Rust Backend (Axum)
 ## 部署方式
 ### Docker 一键部署
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh | sudo bash
+curl -H 'Cache-Control: no-cache' -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh \
+  | sed 's/\r$//' \
+  | sudo bash
 ```
 脚本会自动：
 1. 安装缺失的 Docker / Git（Ubuntu 环境）。
@@ -137,6 +139,7 @@ curl http://127.0.0.1:8990/v1/messages \
 | API 401 | 确认 `config.json` 的 `apiKey` 与请求 Header 一致，并在 UI 中已设置。|
 | 额度查询失败 | 账号可能失效，重新导入 token 或禁用该账号。|
 | 端口冲突 | 设置 `KIRO_CONSOLE_PORT=<新端口>` 后重跑脚本。|
+| 容器报 “加载配置失败：EOF while parsing a value” | 说明 `/var/lib/kiro-console/config.json` 被清空。执行 `sudo docker rm -f kiro-console && sudo rm -f /var/lib/kiro-console/config.json` 后，再运行上面的“一键命令”即可自动重建配置。|
 
 ## 免责声明
 本项目仅供研究学习使用，与 AWS/KIRO/Anthropic/Claude 等官方无关，使用者需自行承担部署与调用造成的所有风险。
