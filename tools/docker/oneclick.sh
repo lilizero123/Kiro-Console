@@ -1,8 +1,9 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
-# 鍙€氳繃鐜鍙橀噺瑕嗙洊杩欎簺榛樿鍊?: "${KIRO_CONSOLE_PORT:=8990}"
+# Allow environment overrides for advanced users
+: "${KIRO_CONSOLE_PORT:=8990}"
 : "${KIRO_CONSOLE_HOST:=0.0.0.0}"
 : "${KIRO_CONSOLE_IMAGE:=kiro-console:latest}"
 : "${KIRO_CONSOLE_CONTAINER:=kiro-console}"
@@ -23,30 +24,39 @@ run_sudo() {
   fi
 }
 
-echo "[Kiro Console] 纭绯荤粺渚濊禆..."
-if command_exists apt-get; then
-  run_sudo apt-get update -y
-  run_sudo apt-get install -y ca-certificates curl git
-fi
+info() {
+  printf '[Kiro Console] %s\n' "$*"
+}
 
-if ! command_exists docker; then
-  echo "[Kiro Console] Docker 鏈娴嬪埌锛屽紑濮嬪畨瑁?.."
-  run_sudo sh -c "curl -fsSL https://get.docker.com | sh"
-fi
+ensure_base_packages() {
+  if command_exists apt-get; then
+    info "Updating apt cache and installing curl/git/ca-certificates"
+    run_sudo apt-get update -y
+    run_sudo apt-get install -y ca-certificates curl git
+  fi
+}
 
-if command_exists systemctl; then
-  run_sudo systemctl enable docker >/dev/null 2>&1 || true
-  run_sudo systemctl start docker >/dev/null 2>&1 || true
-fi
+ensure_docker() {
+  if ! command_exists docker; then
+    info "Docker not found, installing via get.docker.com"
+    run_sudo sh -c "curl -fsSL https://get.docker.com | sh"
+  fi
 
-echo "[Kiro Console] 鍑嗗閰嶇疆鐩綍 ${KIRO_CONSOLE_CONFIG_DIR}"
-run_sudo mkdir -p "${KIRO_CONSOLE_CONFIG_DIR}"
+  if command_exists systemctl; then
+    run_sudo systemctl enable docker >/dev/null 2>&1 || true
+    run_sudo systemctl start docker >/dev/null 2>&1 || true
+  fi
+}
 
-CONFIG_FILE="${KIRO_CONSOLE_CONFIG_DIR}/config.json"
-CREDENTIALS_FILE="${KIRO_CONSOLE_CONFIG_DIR}/credentials.json"
+prepare_config() {
+  info "Preparing config directory ${KIRO_CONSOLE_CONFIG_DIR}"
+  run_sudo mkdir -p "${KIRO_CONSOLE_CONFIG_DIR}"
 
-if [ ! -f "${CONFIG_FILE}" ]; then
-  cat <<EOF | run_sudo tee "${CONFIG_FILE}" >/dev/null
+  CONFIG_FILE="${KIRO_CONSOLE_CONFIG_DIR}/config.json"
+  CREDENTIALS_FILE="${KIRO_CONSOLE_CONFIG_DIR}/credentials.json"
+
+  if [ ! -f "${CONFIG_FILE}" ]; then
+    cat <<EOF | run_sudo tee "${CONFIG_FILE}" >/dev/null
 {
   "host": "${KIRO_CONSOLE_HOST}",
   "port": ${KIRO_CONSOLE_PORT},
@@ -54,54 +64,70 @@ if [ ! -f "${CONFIG_FILE}" ]; then
   "region": "us-east-1"
 }
 EOF
-fi
-
-if [ ! -f "${CREDENTIALS_FILE}" ]; then
-  echo "[]" | run_sudo tee "${CREDENTIALS_FILE}" >/dev/null
-fi
-
-NEED_BUILD=1
-if [[ "${KIRO_CONSOLE_FORCE_BUILD}" == "1" ]]; then
-  echo "[Kiro Console] 宸茶缃?KIRO_CONSOLE_FORCE_BUILD=1锛岃烦杩囬暅鍍忔媺鍙栫洿鎺ョ紪璇?
-else
-  echo "[Kiro Console] 灏濊瘯鎷夊彇棰勬瀯寤洪暅鍍?${KIRO_CONSOLE_IMAGE}"
-  if run_sudo docker pull "${KIRO_CONSOLE_IMAGE}" >/dev/null 2>&1; then
-    echo "[Kiro Console] 宸茶幏鍙栭暅鍍?${KIRO_CONSOLE_IMAGE}"
-    NEED_BUILD=0
-  else
-    echo "[Kiro Console] 鎷夊彇澶辫触锛屽洖閫€鍒版簮鐮佹瀯寤?
   fi
-fi
 
-if [[ "${NEED_BUILD}" == "1" ]]; then
-  TMP_DIR="$(mktemp -d)"
-  cleanup() {
-    rm -rf "${TMP_DIR}"
-  }
-  trap cleanup EXIT
+  if [ ! -f "${CREDENTIALS_FILE}" ]; then
+    echo "[]" | run_sudo tee "${CREDENTIALS_FILE}" >/dev/null
+  fi
+}
 
-  echo "[Kiro Console] 鎷夊彇婧愮爜 ${KIRO_CONSOLE_REPO} (${KIRO_CONSOLE_BRANCH})"
-  git clone --depth 1 --branch "${KIRO_CONSOLE_BRANCH}" "${KIRO_CONSOLE_REPO}" "${TMP_DIR}/repo"
+build_or_pull_image() {
+  NEED_BUILD=1
 
-  echo "[Kiro Console] 鏋勫缓 Docker 闀滃儚 ${KIRO_CONSOLE_IMAGE}"
-  run_sudo docker build -t "${KIRO_CONSOLE_IMAGE}" "${TMP_DIR}/repo"
-fi
+  if [[ "${KIRO_CONSOLE_FORCE_BUILD}" == "1" ]]; then
+    info "KIRO_CONSOLE_FORCE_BUILD=1, skip pull and force source build"
+  else
+    info "Trying to pull prebuilt image ${KIRO_CONSOLE_IMAGE}"
+    if run_sudo docker pull "${KIRO_CONSOLE_IMAGE}" >/dev/null 2>&1; then
+      info "Image ${KIRO_CONSOLE_IMAGE} pulled successfully"
+      NEED_BUILD=0
+    else
+      info "Image pull failed, falling back to local build"
+    fi
+  fi
 
-if run_sudo docker ps -a --format '{{.Names}}' | grep -q "^${KIRO_CONSOLE_CONTAINER}\$"; then
-  echo "[Kiro Console] 鍋滄鐜版湁瀹瑰櫒 ${KIRO_CONSOLE_CONTAINER}"
-  run_sudo docker rm -f "${KIRO_CONSOLE_CONTAINER}" >/dev/null 2>&1 || true
-fi
+  if [[ "${NEED_BUILD}" == "1" ]]; then
+    TMP_DIR="$(mktemp -d)"
+    cleanup() {
+      rm -rf "${TMP_DIR}"
+    }
+    trap cleanup EXIT
 
-echo "[Kiro Console] 鍚姩瀹瑰櫒 ${KIRO_CONSOLE_CONTAINER}"
-run_sudo docker run -d \
-  --name "${KIRO_CONSOLE_CONTAINER}" \
-  --restart unless-stopped \
-  -p "${KIRO_CONSOLE_PORT}:8990" \
-  -v "${KIRO_CONSOLE_CONFIG_DIR}:/app/config" \
-  "${KIRO_CONSOLE_IMAGE}"
+    info "Cloning ${KIRO_CONSOLE_REPO} (${KIRO_CONSOLE_BRANCH})"
+    git clone --depth 1 --branch "${KIRO_CONSOLE_BRANCH}" "${KIRO_CONSOLE_REPO}" "${TMP_DIR}/repo"
 
-echo
-echo "Kiro Console 宸插惎鍔紝璁块棶 http://<鏈嶅姟鍣↖P>:${KIRO_CONSOLE_PORT}/admin 瀹屾垚鍒濆鍖栥€?
-echo "閰嶇疆鐩綍鎸傝浇鍦?${KIRO_CONSOLE_CONFIG_DIR}锛屼慨鏀瑰悗鍙墽琛屽悓涓€鍛戒护鑷姩閲嶅缓瀹瑰櫒銆?
+    info "Building Docker image ${KIRO_CONSOLE_IMAGE}"
+    run_sudo docker build -t "${KIRO_CONSOLE_IMAGE}" "${TMP_DIR}/repo"
+  fi
+}
 
+run_container() {
+  if run_sudo docker ps -a --format '{{.Names}}' | grep -q "^${KIRO_CONSOLE_CONTAINER}$"; then
+    info "Removing existing container ${KIRO_CONSOLE_CONTAINER}"
+    run_sudo docker rm -f "${KIRO_CONSOLE_CONTAINER}" >/dev/null 2>&1 || true
+  fi
 
+  info "Starting container ${KIRO_CONSOLE_CONTAINER}"
+  run_sudo docker run -d \
+    --name "${KIRO_CONSOLE_CONTAINER}" \
+    --restart unless-stopped \
+    -p "${KIRO_CONSOLE_PORT}:8990" \
+    -v "${KIRO_CONSOLE_CONFIG_DIR}:/app/config" \
+    "${KIRO_CONSOLE_IMAGE}"
+
+  cat <<EON
+
+------------------------------------------------------------------
+Kiro Console is running.
+Open   : http://<server-ip>:${KIRO_CONSOLE_PORT}/admin
+Config : ${KIRO_CONSOLE_CONFIG_DIR}
+Re-run this script to rebuild and restart at any time.
+------------------------------------------------------------------
+EON
+}
+
+ensure_base_packages
+ensure_docker
+prepare_config
+build_or_pull_image
+run_container
