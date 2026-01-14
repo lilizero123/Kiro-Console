@@ -59,9 +59,7 @@ Rust Backend (Axum)
 ## 部署方式
 ### Docker 一键部署
 ```bash
-curl -H 'Cache-Control: no-cache' -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh \
-  | sed 's/\r$//' \
-  | sudo bash
+curl -H 'Cache-Control: no-cache' -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh | sed 's/\r$//' | sudo bash
 ```
 脚本会自动：
 1. 安装缺失的 Docker / Git（Ubuntu 环境）。
