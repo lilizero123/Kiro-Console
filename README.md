@@ -183,7 +183,7 @@ Kiro Console 提供自包含的 Docker 镜像，脚本可在干净 Ubuntu 上一
 ### 极速脚本（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/main/tools/docker/oneclick.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh | sudo bash
 ```
 
 脚本将自动：
@@ -207,7 +207,7 @@ curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/main/tools
 示例：自定义端口为 `8080`
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/main/tools/docker/oneclick.sh \
+curl -fsSL https://raw.githubusercontent.com/lilizero123/Kiro-Console/master/tools/docker/oneclick.sh \
   | sudo env KIRO_CONSOLE_PORT=8080 bash
 ```
 
