@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-# 可通过环境变量覆盖这些默认值
-: "${KIRO_CONSOLE_PORT:=8990}"
+# 可通过环境变量覆盖这些默认�?: "${KIRO_CONSOLE_PORT:=8990}"
 : "${KIRO_CONSOLE_HOST:=0.0.0.0}"
 : "${KIRO_CONSOLE_IMAGE:=kiro-console:latest}"
 : "${KIRO_CONSOLE_CONTAINER:=kiro-console}"
 : "${KIRO_CONSOLE_CONFIG_DIR:=/var/lib/kiro-console}"
 : "${KIRO_CONSOLE_REPO:=https://github.com/lilizero123/Kiro-Console.git}"
 : "${KIRO_CONSOLE_BRANCH:=master}"
+: "${KIRO_CONSOLE_FORCE_BUILD:=0}"
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
@@ -30,7 +30,7 @@ if command_exists apt-get; then
 fi
 
 if ! command_exists docker; then
-  echo "[Kiro Console] Docker 未检测到，开始安装..."
+  echo "[Kiro Console] Docker 未检测到，开始安�?.."
   run_sudo sh -c "curl -fsSL https://get.docker.com | sh"
 fi
 
@@ -60,17 +60,32 @@ if [ ! -f "${CREDENTIALS_FILE}" ]; then
   echo "[]" | run_sudo tee "${CREDENTIALS_FILE}" >/dev/null
 fi
 
-TMP_DIR="$(mktemp -d)"
-cleanup() {
-  rm -rf "${TMP_DIR}"
-}
-trap cleanup EXIT
+NEED_BUILD=1
+if [[ "${KIRO_CONSOLE_FORCE_BUILD}" == "1" ]]; then
+  echo "[Kiro Console] 已设�?KIRO_CONSOLE_FORCE_BUILD=1，跳过镜像拉取直接编�?
+else
+  echo "[Kiro Console] 尝试拉取预构建镜�?${KIRO_CONSOLE_IMAGE}"
+  if run_sudo docker pull "${KIRO_CONSOLE_IMAGE}" >/dev/null 2>&1; then
+    echo "[Kiro Console] 已获取镜�?${KIRO_CONSOLE_IMAGE}"
+    NEED_BUILD=0
+  else
+    echo "[Kiro Console] 拉取失败，回退到源码构�?
+  fi
+fi
 
-echo "[Kiro Console] 拉取源码 ${KIRO_CONSOLE_REPO} (${KIRO_CONSOLE_BRANCH})"
-git clone --depth 1 --branch "${KIRO_CONSOLE_BRANCH}" "${KIRO_CONSOLE_REPO}" "${TMP_DIR}/repo"
+if [[ "${NEED_BUILD}" == "1" ]]; then
+  TMP_DIR="$(mktemp -d)"
+  cleanup() {
+    rm -rf "${TMP_DIR}"
+  }
+  trap cleanup EXIT
 
-echo "[Kiro Console] 构建 Docker 镜像 ${KIRO_CONSOLE_IMAGE}"
-run_sudo docker build -t "${KIRO_CONSOLE_IMAGE}" "${TMP_DIR}/repo"
+  echo "[Kiro Console] 拉取源码 ${KIRO_CONSOLE_REPO} (${KIRO_CONSOLE_BRANCH})"
+  git clone --depth 1 --branch "${KIRO_CONSOLE_BRANCH}" "${KIRO_CONSOLE_REPO}" "${TMP_DIR}/repo"
+
+  echo "[Kiro Console] 构建 Docker 镜像 ${KIRO_CONSOLE_IMAGE}"
+  run_sudo docker build -t "${KIRO_CONSOLE_IMAGE}" "${TMP_DIR}/repo"
+fi
 
 if run_sudo docker ps -a --format '{{.Names}}' | grep -q "^${KIRO_CONSOLE_CONTAINER}\$"; then
   echo "[Kiro Console] 停止现有容器 ${KIRO_CONSOLE_CONTAINER}"
@@ -86,5 +101,6 @@ run_sudo docker run -d \
   "${KIRO_CONSOLE_IMAGE}"
 
 echo
-echo "Kiro Console 已启动，访问 http://<服务器IP>:${KIRO_CONSOLE_PORT}/admin 完成初始化。"
-echo "配置目录挂载在 ${KIRO_CONSOLE_CONFIG_DIR}，修改后可执行同一命令自动重建容器。"
+echo "Kiro Console 已启动，访问 http://<服务器IP>:${KIRO_CONSOLE_PORT}/admin 完成初始化�?
+echo "配置目录挂载�?${KIRO_CONSOLE_CONFIG_DIR}，修改后可执行同一命令自动重建容器�?
+
