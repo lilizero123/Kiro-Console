@@ -9,7 +9,7 @@ set -euo pipefail
 : "${KIRO_CONSOLE_CONTAINER:=kiro-console}"
 : "${KIRO_CONSOLE_CONFIG_DIR:=/var/lib/kiro-console}"
 : "${KIRO_CONSOLE_REPO:=https://github.com/lilizero123/Kiro-Console.git}"
-: "${KIRO_CONSOLE_BRANCH:=main}"
+: "${KIRO_CONSOLE_BRANCH:=master}"
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
